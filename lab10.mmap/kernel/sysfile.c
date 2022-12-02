@@ -485,82 +485,30 @@ sys_pipe(void)
   return 0;
 }
 
-uint64
-sys_mmap(void)
-{
-  struct proc *p = myproc();
-  int length, prot, flags, fd;
-  struct file* file;
 
-  if(argint(1, &length) || argint(2, &prot) || argint(3, &flags) || argfd(4, &fd, &file))
-    return -1;
-  if(!file->writable && (prot & PROT_WRITE) && flags == MAP_SHARED)
-    return -1;
-
-  length = PGROUNDUP(length);
-
-  if((p->sz + length)>MAXVA)
-    return -1;
-
-  for(int i=0; i<16; i++){
-    if(p->vams[i].used == 0){
-      p->vams[i].used = 1;
-      p->vams[i].length = length;
-      p->vams[i].fixed_length = length;
-      p->vams[i].prot = prot;
-      p->vams[i].flags = flags;
-      p->vams[i].file = file;
-      p->vams[i].addr = p->sz;
-      p->sz += length;
-      filedup(p->vams[i].file);
-      return p->vams[i].addr;
-    }
-  }
-
-  return -1;
-  
-}
-
-uint64
-sys_munmap(void)
-{
-  struct proc* p = myproc();
-  int length;
-  uint64 addr;
-
-  if(argaddr(0, &addr) || argint(1, &length))
-    return -1;
-
-  length = PGROUNDUP(length);
-  addr = PGROUNDDOWN(addr);
-  
-  for(int i=0; i<length; i += PGSIZE){
-    uint64 addr_temp = addr + i;
-    int num_vam = get_num_vam(addr_temp, p);
-    if(num_vam == -1 || p->vams[num_vam].used == 0)
-      return -1;
-    if(p->vams[num_vam].flags & MAP_SHARED){
-      filewrite(p->vams[num_vam].file, addr_temp, PGSIZE);
-    }
-    p->vams[num_vam].length --;
-    uvmunmap(p->pagetable, addr_temp, 1, 0);
-  }
-
-  for(int i=0; i<16; i++){
-    if(p->vams[i].length == 0 && p->vams[i].file){
-      fileclose(p->vams[i].file);
-      p->vams[i].used = 0;
-    }  
-  }
-
-  return 0;
-}
-
+#ifdef LAB_NET
 int
-get_num_vam(uint64 addr, struct proc* p){
-  for(int i=0; i<16; i++){
-    if((addr >= p->vams[i].addr) && (addr < p->vams[i].addr + p->vams[i].fixed_length))
-      return i;
+sys_connect(void)
+{
+  struct file *f;
+  int fd;
+  uint32 raddr;
+  uint32 rport;
+  uint32 lport;
+
+  if (argint(0, (int*)&raddr) < 0 ||
+      argint(1, (int*)&lport) < 0 ||
+      argint(2, (int*)&rport) < 0) {
+    return -1;
   }
-  return -1;
+
+  if(sockalloc(&f, raddr, lport, rport) < 0)
+    return -1;
+  if((fd=fdalloc(f)) < 0){
+    fileclose(f);
+    return -1;
+  }
+
+  return fd;
 }
+#endif

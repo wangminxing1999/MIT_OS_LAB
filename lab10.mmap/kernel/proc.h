@@ -1,5 +1,4 @@
 // Saved registers for kernel context switches.
-
 struct context {
   uint64 ra;
   uint64 sp;
@@ -83,16 +82,6 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-struct vam {
-  struct file* file;
-  int length;
-  int fixed_length;
-  int prot;
-  int flags;
-  int used;
-  uint64 addr;
-};
-
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -116,6 +105,4 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  struct vam vams[16];
-  int used_vams;
 };

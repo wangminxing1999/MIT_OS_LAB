@@ -5,10 +5,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-#include "fcntl.h"
-#include "sleeplock.h"
-#include "fs.h"
-#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -57,7 +53,7 @@ usertrap(void)
   if(r_scause() == 8){
     // system call
 
-    if(p->killed)
+    if(lockfree_read4(&p->killed))
       exit(-1);
 
     // sepc points to the ecall instruction,
@@ -69,47 +65,19 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if(r_scause() == 13 || r_scause() == 15){
-    uint64 va = r_stval();
-    if(PGROUNDUP(va) <= PGROUNDDOWN(p->trapframe->sp) || va > MAXVA || va >= p->sz)
-      p->killed = 1;
-    else{
-      va = PGROUNDDOWN(va);
-      int num_vam = -1;
-      for(int i=0; i<16; i++){
-        if((p->vams[i].used = 1) && (va >= p->vams[i].addr) && (va < (p->vams[i].addr + p->vams[i].length))){
-          num_vam = i;
-          break;
-        }
-      }
-      if(num_vam == -1)
-        p->killed = 1;
-      else{
-        uint64 mem = (uint64)kalloc();
-        memset((void*)mem, 0, PGSIZE);
-        int perm = PTE_U;
-        if(p->vams[num_vam].prot & PROT_READ)
-          perm |= PTE_R;
-        if(p->vams[num_vam].prot & PROT_WRITE)
-          perm |= PTE_W;
-        if(p->vams[num_vam].prot & PROT_EXEC)
-          perm |= PTE_X;
-        mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm);
-        ilock((p->vams[num_vam].file)->ip);
-        readi((p->vams[num_vam].file)->ip, 0, mem, va-p->vams[num_vam].addr, PGSIZE);
-        iunlock((p->vams[num_vam].file)->ip);
-      }
-    }
-    } else if((which_dev = devintr()) != 0){
+  } else if((which_dev = devintr()) != 0){
     // ok
   } else {
+
+    
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
-  if(p->killed)
+  if(lockfree_read4(&p->killed))
     exit(-1);
+  
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
@@ -224,7 +192,13 @@ devintr()
       uartintr();
     } else if(irq == VIRTIO0_IRQ){
       virtio_disk_intr();
-    } else if(irq){
+    }
+#ifdef LAB_NET
+    else if(irq == E1000_IRQ){
+      e1000_intr();
+    }
+#endif
+    else if(irq){
       printf("unexpected interrupt irq=%d\n", irq);
     }
 

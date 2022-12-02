@@ -1,1 +1,1 @@
-实现mmap与munmap的系统调用，应用lazy allocation，保证映射大文件的效率
+实现E1000网卡驱动中的transmit()和recv()函数
